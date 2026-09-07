@@ -1,0 +1,406 @@
+/**
+ * 漢字の庭 — Kanji Garden
+ * Interactive kanji explorer with artistic design
+ */
+
+(function () {
+    'use strict';
+
+    // State
+    let kanjiData = {};
+    let relatedCache = {};  // Precomputed relationships
+    let activeKanji = null;
+    let searchTerm = '';
+
+    // DOM refs
+    const grid = document.getElementById('kanji-grid');
+    const detailPanel = document.getElementById('detail-panel');
+    const overlay = document.getElementById('overlay');
+    const closeBtn = document.getElementById('close-panel');
+    const searchInput = document.getElementById('search-input');
+    const countEl = document.getElementById('kanji-count');
+
+    // Detail panel elements
+    const detailChar = document.getElementById('detail-char');
+    const detailMeaning = document.getElementById('detail-meaning');
+    const onTags = document.getElementById('on-tags');
+    const kunTags = document.getElementById('kun-tags');
+    const compoundsList = document.getElementById('compounds-list');
+    const relatedGrid = document.getElementById('related-grid');
+
+    // ===== INITIALIZATION =====
+    async function init() {
+        try {
+            const resp = await fetch('data/kanji.json');
+            kanjiData = await resp.json();
+        } catch (e) {
+            console.error('Failed to load kanji data:', e);
+            grid.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>Failed to load kanji data</p></div>`;
+            return;
+        }
+
+        countEl.textContent = Object.keys(kanjiData).length;
+        precomputeRelations();
+        renderGrid();
+        setupEvents();
+        initBackground();
+    }
+
+    // ===== GRID RENDERING =====
+    function renderGrid() {
+        const chars = Object.keys(kanjiData);
+        const fragment = document.createDocumentFragment();
+
+        chars.forEach((char, i) => {
+            const entry = kanjiData[char];
+            const card = document.createElement('div');
+            card.className = 'kanji-card';
+            card.dataset.char = char;
+            card.style.animationDelay = `${Math.min(i * 0.003, 0.6)}s`;
+
+            // Build tooltip content
+            const onReading = entry.on.slice(0, 2).join(' · ');
+            const kunReading = entry.kun.slice(0, 2).join(' · ');
+            const readingDisplay = [onReading, kunReading].filter(Boolean).join(' / ') || '—';
+
+            card.innerHTML = `
+                <span class="char">${char}</span>
+                <div class="tooltip">
+                    <div class="t-reading">${escapeHtml(readingDisplay)}</div>
+                    <div class="t-meaning">${escapeHtml(entry.m)}</div>
+                </div>
+            `;
+
+            card.addEventListener('click', () => activateKanji(char));
+            fragment.appendChild(card);
+        });
+
+        grid.appendChild(fragment);
+    }
+
+    // ===== ACTIVATION (PIN) =====
+    function activateKanji(char) {
+        const entry = kanjiData[char];
+        if (!entry) return;
+
+        activeKanji = char;
+
+        // Update card states
+        document.querySelectorAll('.kanji-card').forEach(card => {
+            card.classList.remove('active', 'related', 'dimmed');
+            if (card.dataset.char === char) {
+                card.classList.add('active');
+            } else if (isRelated(char, card.dataset.char)) {
+                card.classList.add('related');
+            } else {
+                card.classList.add('dimmed');
+            }
+        });
+
+        // Populate detail panel
+        populateDetail(char, entry);
+
+        // Open panel
+        detailPanel.classList.add('open');
+        overlay.classList.add('visible');
+        detailPanel.scrollTop = 0;
+    }
+
+    function deactivateKanji() {
+        activeKanji = null;
+        document.querySelectorAll('.kanji-card').forEach(card => {
+            card.classList.remove('active', 'related', 'dimmed');
+        });
+        detailPanel.classList.remove('open');
+        overlay.classList.remove('visible');
+    }
+
+    // ===== DETAIL PANEL =====
+    function populateDetail(char, entry) {
+        // Hero
+        detailChar.textContent = char;
+        detailMeaning.textContent = entry.m;
+
+        // On readings
+        onTags.innerHTML = '';
+        if (entry.on.length > 0) {
+            entry.on.forEach(r => {
+                const tag = document.createElement('span');
+                tag.className = 'reading-tag on';
+                tag.textContent = r;
+                onTags.appendChild(tag);
+            });
+            document.getElementById('on-readings').style.display = '';
+        } else {
+            document.getElementById('on-readings').style.display = 'none';
+        }
+
+        // Kun readings
+        kunTags.innerHTML = '';
+        if (entry.kun.length > 0) {
+            entry.kun.forEach(r => {
+                const tag = document.createElement('span');
+                tag.className = 'reading-tag kun';
+                tag.textContent = r;
+                kunTags.appendChild(tag);
+            });
+            document.getElementById('kun-readings').style.display = '';
+        } else {
+            document.getElementById('kun-readings').style.display = 'none';
+        }
+
+        // Compounds
+        compoundsList.innerHTML = '';
+        if (entry.c && entry.c.length > 0) {
+            entry.c.forEach(([word, reading, meaning]) => {
+                const item = document.createElement('div');
+                item.className = 'compound-item';
+
+                // Highlight the active kanji in the compound word
+                const highlightedWord = word.split('').map(c =>
+                    c === char ? `<span class="highlight-char">${c}</span>` : c
+                ).join('');
+
+                item.innerHTML = `
+                    <span class="compound-word">${highlightedWord}</span>
+                    <span class="compound-reading">${escapeHtml(reading)}</span>
+                    <span class="compound-meaning">${escapeHtml(meaning)}</span>
+                `;
+
+                // Hover on compound to highlight its kanji in the grid
+                const otherKanji = [...word].filter(c => c !== char && kanjiData[c]);
+                item.addEventListener('mouseenter', () => {
+                    document.querySelectorAll('.kanji-card').forEach(card => {
+                        if (otherKanji.includes(card.dataset.char)) {
+                            card.classList.add('related');
+                        }
+                    });
+                });
+                item.addEventListener('mouseleave', () => {
+                    document.querySelectorAll('.kanji-card.related').forEach(card => {
+                        if (card.dataset.char !== activeKanji) {
+                            card.classList.remove('related');
+                        }
+                    });
+                });
+
+                compoundsList.appendChild(item);
+            });
+        }
+
+        // Related kanji - find kanji that appear together in compounds
+        relatedGrid.innerHTML = '';
+        const relatedChars = findRelatedKanji(char);
+        relatedChars.forEach(rc => {
+            const card = document.createElement('div');
+            card.className = 'related-card';
+            card.textContent = rc;
+            card.title = kanjiData[rc]?.m || '';
+            card.addEventListener('click', () => {
+                activateKanji(rc);
+            });
+            relatedGrid.appendChild(card);
+        });
+    }
+
+    // ===== RELATIONSHIP LOGIC =====
+    function precomputeRelations() {
+        // Build a map: for each kanji, which other kanji share compounds
+        Object.keys(kanjiData).forEach(char => {
+            const related = new Set();
+            const entry = kanjiData[char];
+
+            // 1. Kanji in same compound words
+            if (entry.c) {
+                entry.c.forEach(([word]) => {
+                    for (const c of word) {
+                        if (c !== char && kanjiData[c]) {
+                            related.add(c);
+                        }
+                    }
+                });
+            }
+
+            // 2. Other kanji whose compounds reference this one
+            Object.entries(kanjiData).forEach(([k, v]) => {
+                if (k === char) return;
+                if (v.c) {
+                    for (const [word] of v.c) {
+                        if (word.includes(char)) {
+                            related.add(k);
+                            break;
+                        }
+                    }
+                }
+            });
+
+            relatedCache[char] = [...related].slice(0, 30);
+        });
+    }
+
+    function findRelatedKanji(char) {
+        return relatedCache[char] || [];
+    }
+
+    function isRelated(sourceChar, targetChar) {
+        if (sourceChar === targetChar) return false;
+        return (relatedCache[sourceChar] || []).includes(targetChar);
+    }
+
+    // ===== SEARCH =====
+    function handleSearch(term) {
+        searchTerm = term.trim().toLowerCase();
+
+        if (!searchTerm) {
+            // Reset all
+            document.querySelectorAll('.kanji-card').forEach(card => {
+                card.classList.remove('search-match', 'search-hidden');
+            });
+            return;
+        }
+
+        document.querySelectorAll('.kanji-card').forEach(card => {
+            const char = card.dataset.char;
+            const entry = kanjiData[char];
+            if (!entry) return;
+
+            const match = matchesSearch(char, entry, searchTerm);
+            card.classList.toggle('search-match', match);
+            card.classList.toggle('search-hidden', !match);
+        });
+    }
+
+    function matchesSearch(char, entry, term) {
+        // Match by character itself
+        if (char.includes(term)) return true;
+
+        // Match by meaning
+        if (entry.m.toLowerCase().includes(term)) return true;
+
+        // Match by on reading
+        if (entry.on.some(r => r.toLowerCase().includes(term))) return true;
+
+        // Match by kun reading
+        if (entry.kun.some(r => r.toLowerCase().includes(term))) return true;
+
+        // Match by compound words
+        if (entry.c) {
+            for (const [word, reading, meaning] of entry.c) {
+                if (word.includes(term) || reading.toLowerCase().includes(term) || meaning.toLowerCase().includes(term)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // ===== EVENTS =====
+    function setupEvents() {
+        closeBtn.addEventListener('click', deactivateKanji);
+        overlay.addEventListener('click', deactivateKanji);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (activeKanji) {
+                    deactivateKanji();
+                } else if (searchTerm) {
+                    searchInput.value = '';
+                    handleSearch('');
+                    searchInput.blur();
+                }
+            }
+        });
+
+        // Debounced search
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                handleSearch(e.target.value);
+            }, 150);
+        });
+
+        // Keyboard shortcut: / to focus search
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement !== searchInput) {
+                e.preventDefault();
+                searchInput.focus();
+            }
+        });
+    }
+
+    // ===== BACKGROUND PARTICLES =====
+    function initBackground() {
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let w, h;
+
+        function resize() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        }
+
+        function createParticles() {
+            particles = [];
+            const count = Math.floor((w * h) / 25000);
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: Math.random() * w,
+                    y: Math.random() * h,
+                    vx: (Math.random() - 0.5) * 0.15,
+                    vy: (Math.random() - 0.5) * 0.15,
+                    size: Math.random() * 1.5 + 0.5,
+                    alpha: Math.random() * 0.15 + 0.03,
+                    hue: Math.random() > 0.7 ? 15 : (Math.random() > 0.5 ? 45 : 220),
+                });
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, w, h);
+
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Wrap around
+                if (p.x < 0) p.x = w;
+                if (p.x > w) p.x = 0;
+                if (p.y < 0) p.y = h;
+                if (p.y > h) p.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${p.hue}, 40%, 60%, ${p.alpha})`;
+                ctx.fill();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', () => {
+            resize();
+            createParticles();
+        });
+
+        resize();
+        createParticles();
+        animate();
+    }
+
+    // ===== UTILITIES =====
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Start
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字の庭 — Kanji Garden</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Zen+Kaku+Gothic+New:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Background canvas for ambient particles -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="logo">
+                <span class="logo-kanji">漢字</span>
+                <span class="logo-sub">の庭</span>
+            </h1>
+            <p class="tagline">常用漢字 · The Living Canvas of Japanese Characters</p>
+        </div>
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Search kanji, reading, meaning..." autocomplete="off">
+            <div class="search-icon">🔍</div>
+        </div>
+        <div class="stats">
+            <span id="kanji-count">0</span> characters
+        </div>
+    </header>
+
+    <!-- Main grid -->
+    <main class="main-container">
+        <div id="kanji-grid" class="kanji-grid"></div>
+    </main>
+
+    <!-- Detail panel (slides in on click) -->
+    <aside id="detail-panel" class="detail-panel">
+        <button id="close-panel" class="close-btn" aria-label="Close">×</button>
+        <div class="detail-content">
+            <div class="detail-hero">
+                <div class="detail-kanji" id="detail-char"></div>
+                <div class="detail-stroke-info" id="detail-meaning"></div>
+            </div>
+
+            <div class="detail-section readings-section">
+                <h3 class="section-title">Readings</h3>
+                <div class="readings-grid">
+                    <div class="reading-group" id="on-readings">
+                        <span class="reading-label">音読み On'yomi</span>
+                        <div class="reading-tags" id="on-tags"></div>
+                    </div>
+                    <div class="reading-group" id="kun-readings">
+                        <span class="reading-label">訓読み Kun'yomi</span>
+                        <div class="reading-tags" id="kun-tags"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section compounds-section">
+                <h3 class="section-title">Common Compounds</h3>
+                <div class="compounds-list" id="compounds-list"></div>
+            </div>
+
+            <div class="detail-section related-section">
+                <h3 class="section-title">Related Kanji</h3>
+                <div class="related-grid" id="related-grid"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Overlay for detail panel -->
+    <div id="overlay" class="overlay"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
