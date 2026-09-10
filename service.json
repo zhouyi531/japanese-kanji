@@ -1,0 +1,73 @@
+{
+  "name": "japanese-kanji",
+  "title": "漢字の庭 — Japanese Kanji Garden",
+  "description": "Static Japanese kanji explorer with vocabulary collection, reading-shooting game and persistent mistake review.",
+  "code_path": "/home/austinzhou/code/japanese-kanji",
+  "host": "192.168.1.21",
+  "bind_host": "0.0.0.0",
+  "port": 18473,
+  "protocol": "http",
+  "tags": ["japanese", "kanji", "vocabulary", "game", "static-site"],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/",
+      "description": "Interactive kanji learning web application.",
+      "request": null,
+      "response": "text/html"
+    },
+    {
+      "method": "GET",
+      "path": "/data/kanji.json",
+      "description": "Current kanji, readings, meanings and compound-word dataset.",
+      "request": null,
+      "response": "application/json object keyed by kanji"
+    },
+    {
+      "method": "GET",
+      "path": "/health.json",
+      "description": "Static liveness probe.",
+      "request": null,
+      "response": "{\"status\":\"ok\",\"service\":\"japanese-kanji\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mistakes",
+      "description": "Read the persistent mistake-review notebook.",
+      "request": null,
+      "response": "array of {id,type,text,reading,accepted,wrongCount,lastWrongAt,reason}"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mistakes",
+      "description": "Replace the whole notebook (UI sync and manual clear).",
+      "request": "{\"items\":[...]}",
+      "response": "the stored array"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/mistakes/<id>",
+      "description": "Remove one review item.",
+      "request": null,
+      "response": "the remaining array"
+    }
+  ],
+  "constraints": "## How to call\n- Static site; open `/` in a modern browser.\n- Binds `0.0.0.0`; LAN clients use `http://192.168.1.21:18473`.\n- No authentication. Do not expose publicly without an access-control layer.\n- The collector is an offline maintenance script and is not invoked over HTTP.\n- Mistake-review data is stored server-side in `data/mistakes.json` via `/api/mistakes` (browser localStorage is only a cache/offline fallback), so it survives restarts and is shared by every client on this origin.\n- Terminal management: `./run.sh review [list|remove <id>|clear]`.\n",
+  "dependencies": [],
+  "env_required": [],
+  "docs": ["README.md", "DEPLOY.md"],
+  "lifecycle": {
+    "cwd": "/home/austinzhou/code/japanese-kanji",
+    "start": "/home/austinzhou/code/japanese-kanji/run.sh -f",
+    "stop": null,
+    "restart": null,
+    "health_check": "http://127.0.0.1:18473/health.json",
+    "health_type": "http",
+    "autostart": false
+  },
+  "extra": {
+    "runtime_bin": "/home/linuxbrew/.linuxbrew/bin",
+    "quick_try_ui": "./run.sh ui",
+    "install": "No dependencies; Python standard library only."
+  }
+}

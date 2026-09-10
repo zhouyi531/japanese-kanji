@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>japanese-kanji · quick try</title>
+  <style>
+    body{font:15px/1.6 system-ui,sans-serif;max-width:720px;margin:3rem auto;padding:0 1rem;color:#e8e0d4;background:#0a0a0f}
+    .card{padding:1.25rem;border:1px solid #d4a85355;border-radius:14px;background:#12121a}
+    button,a{display:inline-block;margin:.5rem .4rem 0 0;padding:.55rem 1rem;border:0;border-radius:8px;background:#c84b31;color:white;text-decoration:none;cursor:pointer}
+    pre{padding:1rem;border-radius:8px;background:#0005;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <h1>漢字の庭 <small>quick try</small></h1>
+  <div class="card">
+    <p>主服务绑定在 <code>0.0.0.0:18473</code>。</p>
+    <a href="http://127.0.0.1:18473/" target="_blank">打开应用</a>
+    <button id="health">检查健康状态</button>
+    <button id="dataset">检查词库</button>
+    <pre id="output">Ready.</pre>
+  </div>
+  <script>
+    const output=document.getElementById('output');
+    async function call(path){const response=await fetch('/api'+path);const text=await response.text();output.textContent=`HTTP ${response.status}\n${text.slice(0,1200)}`;}
+    document.getElementById('health').onclick=()=>call('/health.json');
+    document.getElementById('dataset').onclick=async()=>{const response=await fetch('/api/data/kanji.json');const data=await response.json();const words=Object.values(data).reduce((n,x)=>n+(x.c||[]).length,0);output.textContent=`HTTP ${response.status}\n${Object.keys(data).length} kanji · ${words} words`;};
+  </script>
+</body>
+</html>

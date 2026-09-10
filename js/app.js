@@ -11,6 +11,8 @@
     let relatedCache = {};  // Precomputed relationships
     let activeKanji = null;
     let searchTerm = '';
+    let currentPage = 1;
+    const PAGE_SIZE = 200;  // kanji per page
 
     // DOM refs
     const grid = document.getElementById('kanji-grid');
@@ -19,6 +21,9 @@
     const closeBtn = document.getElementById('close-panel');
     const searchInput = document.getElementById('search-input');
     const countEl = document.getElementById('kanji-count');
+    const wordCountEl = document.getElementById('word-count');
+    const paginationEl = document.getElementById('pagination');
+    const pageInfoEl = document.getElementById('page-info');
 
     // Detail panel elements
     const detailChar = document.getElementById('detail-char');
@@ -31,7 +36,10 @@
     // ===== INITIALIZATION =====
     async function init() {
         try {
-            const resp = await fetch('data/kanji.json');
+            // The collector rewrites this file in place. Always revalidate it so a
+            // browser session cannot hide newly collected entries behind HTTP cache.
+            const resp = await fetch('data/kanji.json', { cache: 'no-store' });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             kanjiData = await resp.json();
         } catch (e) {
             console.error('Failed to load kanji data:', e);
@@ -40,6 +48,8 @@
         }
 
         countEl.textContent = Object.keys(kanjiData).length;
+        wordCountEl.textContent = Object.values(kanjiData)
+            .reduce((total, entry) => total + (entry.c || []).length, 0);
         precomputeRelations();
         renderGrid();
         setupEvents();
@@ -47,16 +57,43 @@
     }
 
     // ===== GRID RENDERING =====
-    function renderGrid() {
+    function getFilteredChars() {
         const chars = Object.keys(kanjiData);
+        if (!searchTerm) return chars;
+        return chars.filter(char => matchesSearch(char, kanjiData[char], searchTerm));
+    }
+
+    function renderGrid() {
+        const filtered = getFilteredChars();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pageChars = filtered.slice(start, start + PAGE_SIZE);
+
+        // Update count
+        countEl.textContent = filtered.length;
+        pageInfoEl.textContent = searchTerm
+            ? `${filtered.length} matches · Page ${currentPage}/${totalPages}`
+            : `Page ${currentPage} of ${totalPages}`;
+
+        // Clear and rebuild grid
+        grid.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
-        chars.forEach((char, i) => {
+        pageChars.forEach((char, i) => {
             const entry = kanjiData[char];
             const card = document.createElement('div');
             card.className = 'kanji-card';
             card.dataset.char = char;
-            card.style.animationDelay = `${Math.min(i * 0.003, 0.6)}s`;
+            card.style.animationDelay = `${Math.min(i * 0.001, 0.3)}s`;
+
+            // Apply states
+            if (activeKanji) {
+                if (char === activeKanji) card.classList.add('active');
+                else if (isRelated(activeKanji, char)) card.classList.add('related');
+                else card.classList.add('dimmed');
+            }
 
             // Build tooltip content
             const onReading = entry.on.slice(0, 2).join(' · ');
@@ -76,6 +113,70 @@
         });
 
         grid.appendChild(fragment);
+        renderPagination(totalPages);
+    }
+
+    function renderPagination(totalPages) {
+        paginationEl.innerHTML = '';
+        if (totalPages <= 1) return;
+
+        // Previous button
+        const prevBtn = document.createElement('button');
+        prevBtn.className = `page-btn ${currentPage === 1 ? 'disabled' : ''}`;
+        prevBtn.textContent = '← Prev';
+        prevBtn.addEventListener('click', () => goToPage(currentPage - 1));
+        paginationEl.appendChild(prevBtn);
+
+        // Page numbers
+        const maxVisible = 7;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        if (endPage - startPage < maxVisible - 1) startPage = Math.max(1, endPage - maxVisible + 1);
+
+        if (startPage > 1) {
+            addPageBtn(1);
+            if (startPage > 2) addEllipsis();
+        }
+
+        for (let p = startPage; p <= endPage; p++) {
+            addPageBtn(p);
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) addEllipsis();
+            addPageBtn(totalPages);
+        }
+
+        // Next button
+        const nextBtn = document.createElement('button');
+        nextBtn.className = `page-btn ${currentPage === totalPages ? 'disabled' : ''}`;
+        nextBtn.textContent = 'Next →';
+        nextBtn.addEventListener('click', () => goToPage(currentPage + 1));
+        paginationEl.appendChild(nextBtn);
+    }
+
+    function addPageBtn(page) {
+        const btn = document.createElement('button');
+        btn.className = `page-btn ${page === currentPage ? 'active' : ''}`;
+        btn.textContent = page;
+        btn.addEventListener('click', () => goToPage(page));
+        paginationEl.appendChild(btn);
+    }
+
+    function addEllipsis() {
+        const span = document.createElement('span');
+        span.className = 'page-btn disabled';
+        span.textContent = '…';
+        paginationEl.appendChild(span);
+    }
+
+    function goToPage(page) {
+        const filtered = getFilteredChars();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        renderGrid();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // ===== ACTIVATION (PIN) =====
@@ -250,24 +351,8 @@
     // ===== SEARCH =====
     function handleSearch(term) {
         searchTerm = term.trim().toLowerCase();
-
-        if (!searchTerm) {
-            // Reset all
-            document.querySelectorAll('.kanji-card').forEach(card => {
-                card.classList.remove('search-match', 'search-hidden');
-            });
-            return;
-        }
-
-        document.querySelectorAll('.kanji-card').forEach(card => {
-            const char = card.dataset.char;
-            const entry = kanjiData[char];
-            if (!entry) return;
-
-            const match = matchesSearch(char, entry, searchTerm);
-            card.classList.toggle('search-match', match);
-            card.classList.toggle('search-hidden', !match);
-        });
+        currentPage = 1;  // Reset to first page on search
+        renderGrid();
     }
 
     function matchesSearch(char, entry, term) {
@@ -299,6 +384,10 @@
     function setupEvents() {
         closeBtn.addEventListener('click', deactivateKanji);
         overlay.addEventListener('click', deactivateKanji);
+        document.addEventListener('kanji:show-detail', event => {
+            const char = event.detail?.char;
+            if (char && kanjiData[char]) activateKanji(char);
+        });
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {

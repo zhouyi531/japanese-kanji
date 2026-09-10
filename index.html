@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Zen+Kaku+Gothic+New:wght@300;400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20260907-4">
 </head>
 <body>
     <!-- Background canvas for ambient particles -->
@@ -27,13 +27,18 @@
             <div class="search-icon">🔍</div>
         </div>
         <div class="stats">
-            <span id="kanji-count">0</span> characters
+            <button id="game-open" class="game-open" type="button">迎撃ゲーム</button>
+            <button id="mistake-open" class="mistake-open" type="button">復習 <strong id="mistake-count">0</strong></button>
+            <span class="stat-item"><strong id="kanji-count">0</strong> 字</span>
+            <span class="stat-item"><strong id="word-count">0</strong> 単語</span>
+            <span class="page-info" id="page-info"></span>
         </div>
     </header>
 
     <!-- Main grid -->
     <main class="main-container">
         <div id="kanji-grid" class="kanji-grid"></div>
+        <div class="pagination" id="pagination"></div>
     </main>
 
     <!-- Detail panel (slides in on click) -->
@@ -74,6 +79,51 @@
     <!-- Overlay for detail panel -->
     <div id="overlay" class="overlay"></div>
 
-    <script src="js/app.js"></script>
+    <section id="mistake-panel" class="mistake-panel" aria-hidden="true" aria-labelledby="mistake-title">
+        <div class="mistake-dialog">
+            <div class="mistake-heading">
+                <div>
+                    <p class="mistake-kicker">REVIEW NOTEBOOK</p>
+                    <h2 id="mistake-title">間違い復習</h2>
+                </div>
+                <button id="mistake-close" class="close-btn mistake-close" type="button" aria-label="復習を閉じる">×</button>
+            </div>
+            <p id="mistake-empty" class="mistake-empty">まだ間違いはありません。ゲームで間違えた漢字や単語がここに保存されます。</p>
+            <div id="mistake-list" class="mistake-list"></div>
+            <div class="mistake-actions">
+                <button id="mistake-review" class="game-start" type="button">錯題を練習</button>
+                <button id="mistake-clear" class="mistake-clear" type="button">すべて削除</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="game-screen" class="game-screen" aria-hidden="true">
+        <div class="game-topbar">
+            <button id="game-close" class="game-icon-btn" type="button" aria-label="ゲームを閉じる">×</button>
+            <div><span class="game-label">得点</span><strong id="game-score">0</strong></div>
+            <div><span class="game-label">連続</span><strong id="game-combo">0</strong></div>
+            <div><span class="game-label">防壁</span><span id="game-hearts" aria-label="残り体力">♥ ♥ ♥</span></div>
+        </div>
+        <div id="game-field" class="game-field">
+            <div class="game-skyline"></div>
+            <div id="game-target" class="game-target" aria-live="polite"></div>
+            <div id="game-shot" class="game-shot"></div>
+            <div class="game-ground"><div id="game-cannon" class="game-cannon">砲</div></div>
+            <div id="game-message" class="game-message"></div>
+        </div>
+        <div id="game-controls" class="game-controls">
+            <div class="game-mode-row">
+                <button class="game-mode active" data-mode="mixed" type="button">漢字＋単語</button>
+                <button class="game-mode" data-mode="kanji" type="button">漢字</button>
+                <button class="game-mode" data-mode="word" type="button">単語</button>
+            </div>
+            <p id="game-prompt">正しい読み方を選んで迎撃せよ</p>
+            <div id="game-answers" class="game-answers"></div>
+            <button id="game-start" class="game-start" type="button">ゲーム開始</button>
+        </div>
+    </section>
+
+    <script src="js/app.js?v=20260907-4"></script>
+    <script src="js/game.js?v=20260910-1"></script>
 </body>
 </html>
