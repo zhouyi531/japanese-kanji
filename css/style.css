@@ -876,3 +876,26 @@ body.game-active { overflow: hidden; }
     font-size: 0.9rem;
     letter-spacing: 0.1em;
 }
+
+/* Mastered kanji: faded in the grid, still clickable */
+.kanji-card.mastered { opacity: .3; }
+.kanji-card.mastered .char { color: var(--ink-muted); }
+.kanji-card.mastered.active { opacity: .6; }
+.kanji-card.mastered.active .char { color: var(--ink-muted); }
+.kanji-card.mastered:hover { opacity: 1; }
+.master-toggle { margin-top: 1rem; border: 1px solid rgba(124,169,130,.45); border-radius: 999px;
+    background: transparent; color: var(--accent-sage); padding: .5rem 1.1rem; cursor: pointer;
+    font-family: var(--font-sans); transition: all .2s ease; }
+.master-toggle:hover { background: rgba(124,169,130,.12); }
+.master-toggle.is-mastered { background: rgba(124,169,130,.2); color: var(--ink-primary); }
+
+/* Homophones shown under each compound */
+.compound-item { flex-wrap: wrap; }
+.compound-homophones { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .25rem .6rem; font-family: var(--font-serif); font-size: .85rem; color: var(--ink-secondary); }
+.homophone-label { font-family: var(--font-sans); font-size: .65rem; color: var(--ink-muted);
+    border: 1px solid var(--ink-faint); border-radius: 4px; padding: 0 .3rem; }
+.homophone-word { cursor: pointer; background: none; border: none; padding: 0; font: inherit; color: inherit;
+    text-decoration: underline dotted var(--ink-faint); text-underline-offset: 3px; }
+.compound-item.flash { border-color: var(--accent-gold); background: rgba(212,168,83,.12); }
+.homophone-word:hover { color: var(--accent-gold); }

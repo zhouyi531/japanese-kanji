@@ -9,10 +9,14 @@
     // State
     let kanjiData = {};
     let relatedCache = {};  // Precomputed relationships
+    let homophoneIndex = new Map();  // reading -> Map(word -> { meaning, owner kanji })
+    const MAX_HOMOPHONES = 10;
     let activeKanji = null;
     let searchTerm = '';
     let currentPage = 1;
     const PAGE_SIZE = 200;  // kanji per page
+    const MASTERED_KEY = 'kanji-garden:mastered:v1';
+    const mastered = loadMastered();  // per-browser progress, stored locally
 
     // DOM refs
     const grid = document.getElementById('kanji-grid');
@@ -32,6 +36,41 @@
     const kunTags = document.getElementById('kun-tags');
     const compoundsList = document.getElementById('compounds-list');
     const relatedGrid = document.getElementById('related-grid');
+    const masterBtn = document.getElementById('master-toggle');
+
+    // ===== MASTERED PROGRESS (localStorage) =====
+    function loadMastered() {
+        try {
+            const value = JSON.parse(localStorage.getItem(MASTERED_KEY) || '[]');
+            return new Set(Array.isArray(value) ? value : []);
+        } catch (e) {
+            console.warn('Could not read mastered kanji:', e);
+            return new Set();
+        }
+    }
+
+    function saveMastered() {
+        try { localStorage.setItem(MASTERED_KEY, JSON.stringify([...mastered])); }
+        catch (e) { console.warn('Could not save mastered kanji:', e); }
+    }
+
+    function toggleMastered(char) {
+        if (mastered.has(char)) mastered.delete(char);
+        else mastered.add(char);
+        saveMastered();
+        const card = grid.querySelector(`.kanji-card[data-char="${char}"]`);
+        if (card) card.classList.toggle('mastered', mastered.has(char));
+        updateMasterUi(char);
+    }
+
+    function updateMasterUi(char) {
+        const isMastered = mastered.has(char);
+        masterBtn.classList.toggle('is-mastered', isMastered);
+        masterBtn.setAttribute('aria-pressed', String(isMastered));
+        masterBtn.textContent = isMastered ? '✓ 習得済み（取り消す）' : '習得済みにする';
+        masteredCountEl.textContent = mastered.size;
+    }
+    const masteredCountEl = document.getElementById('mastered-count');
 
     // ===== INITIALIZATION =====
     async function init() {
@@ -50,7 +89,9 @@
         countEl.textContent = Object.keys(kanjiData).length;
         wordCountEl.textContent = Object.values(kanjiData)
             .reduce((total, entry) => total + (entry.c || []).length, 0);
+        masteredCountEl.textContent = mastered.size;
         precomputeRelations();
+        buildHomophoneIndex();
         renderGrid();
         setupEvents();
         initBackground();
@@ -86,6 +127,7 @@
             const card = document.createElement('div');
             card.className = 'kanji-card';
             card.dataset.char = char;
+            if (mastered.has(char)) card.classList.add('mastered');
             card.style.animationDelay = `${Math.min(i * 0.001, 0.3)}s`;
 
             // Apply states
@@ -221,6 +263,7 @@
         // Hero
         detailChar.textContent = char;
         detailMeaning.textContent = entry.m;
+        updateMasterUi(char);
 
         // On readings
         onTags.innerHTML = '';
@@ -256,6 +299,7 @@
             entry.c.forEach(([word, reading, meaning]) => {
                 const item = document.createElement('div');
                 item.className = 'compound-item';
+                item.dataset.word = word;
 
                 // Highlight the active kanji in the compound word
                 const highlightedWord = word.split('').map(c =>
@@ -267,6 +311,7 @@
                     <span class="compound-reading">${escapeHtml(reading)}</span>
                     <span class="compound-meaning">${escapeHtml(meaning)}</span>
                 `;
+                appendHomophones(item, word, reading);
 
                 // Hover on compound to highlight its kanji in the grid
                 const otherKanji = [...word].filter(c => c !== char && kanjiData[c]);
@@ -339,6 +384,54 @@
         });
     }
 
+    // Homophones: other compound words anywhere in the dataset with the same reading.
+    function buildHomophoneIndex() {
+        homophoneIndex = new Map();
+        Object.entries(kanjiData).forEach(([owner, entry]) => {
+            (entry.c || []).forEach(([word, reading, meaning]) => {
+                if (!reading || [...word].length < 2) return;  // multi-character words only
+                if (!homophoneIndex.has(reading)) homophoneIndex.set(reading, new Map());
+                const words = homophoneIndex.get(reading);
+                if (!words.has(word)) words.set(word, { meaning, owner });
+            });
+        });
+    }
+
+    function appendHomophones(item, word, reading) {
+        const others = [...(homophoneIndex.get(reading) || [])]
+            .filter(([w]) => w !== word)
+            .slice(0, MAX_HOMOPHONES);
+        if (others.length === 0) return;
+
+        const row = document.createElement('div');
+        row.className = 'compound-homophones';
+        const label = document.createElement('span');
+        label.className = 'homophone-label';
+        label.textContent = '同音';
+        row.appendChild(label);
+        others.forEach(([w, { meaning, owner }]) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'homophone-word';
+            btn.textContent = w;
+            btn.title = `${meaning || ''}（${owner}）`;
+            btn.addEventListener('click', () => showCompound(owner, w));
+            row.appendChild(btn);
+        });
+        item.appendChild(row);
+    }
+
+    // Open the kanji that lists this compound, then point at the compound itself.
+    function showCompound(owner, word) {
+        activateKanji(owner);
+        const target = [...compoundsList.querySelectorAll('.compound-item')]
+            .find(item => item.dataset.word === word);
+        if (!target) return;
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        target.classList.add('flash');
+        setTimeout(() => target.classList.remove('flash'), 1600);
+    }
+
     function findRelatedKanji(char) {
         return relatedCache[char] || [];
     }
@@ -383,6 +476,9 @@
     // ===== EVENTS =====
     function setupEvents() {
         closeBtn.addEventListener('click', deactivateKanji);
+        masterBtn.addEventListener('click', () => {
+            if (activeKanji) toggleMastered(activeKanji);
+        });
         overlay.addEventListener('click', deactivateKanji);
         document.addEventListener('kanji:show-detail', event => {
             const char = event.detail?.char;

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Zen+Kaku+Gothic+New:wght@300;400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260907-4">
+    <link rel="stylesheet" href="css/style.css?v=20260913-4">
 </head>
 <body>
     <!-- Background canvas for ambient particles -->
@@ -29,6 +29,7 @@
         <div class="stats">
             <button id="game-open" class="game-open" type="button">迎撃ゲーム</button>
             <button id="mistake-open" class="mistake-open" type="button">復習 <strong id="mistake-count">0</strong></button>
+            <span class="stat-item">習得 <strong id="mastered-count">0</strong></span>
             <span class="stat-item"><strong id="kanji-count">0</strong> 字</span>
             <span class="stat-item"><strong id="word-count">0</strong> 単語</span>
             <span class="page-info" id="page-info"></span>
@@ -48,6 +49,7 @@
             <div class="detail-hero">
                 <div class="detail-kanji" id="detail-char"></div>
                 <div class="detail-stroke-info" id="detail-meaning"></div>
+                <button id="master-toggle" class="master-toggle" type="button" aria-pressed="false">習得済みにする</button>
             </div>
 
             <div class="detail-section readings-section">
@@ -123,7 +125,7 @@
         </div>
     </section>
 
-    <script src="js/app.js?v=20260907-4"></script>
+    <script src="js/app.js?v=20260913-4"></script>
     <script src="js/game.js?v=20260910-1"></script>
 </body>
 </html>
