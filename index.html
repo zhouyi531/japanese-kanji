@@ -7,7 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;700&family=Zen+Kaku+Gothic+New:wght@300;400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260913-4">
+    <link rel="stylesheet" href="css/style.css?v=20261023-1">
+    <script>
+        // Apply the saved theme before first paint; fall back to the OS preference.
+        (function () {
+            var theme = null;
+            try { theme = localStorage.getItem('kanji-garden:theme:v1'); } catch (e) {}
+            if (!theme) theme = matchMedia('(prefers-color-scheme: light)').matches ? 'washi' : 'sumi';
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
 </head>
 <body>
     <!-- Background canvas for ambient particles -->
@@ -33,6 +42,13 @@
             <span class="stat-item"><strong id="kanji-count">0</strong> 字</span>
             <span class="stat-item"><strong id="word-count">0</strong> 単語</span>
             <span class="page-info" id="page-info"></span>
+            <div id="theme-picker" class="theme-picker" role="group" aria-label="テーマ">
+                <button class="theme-btn" type="button" data-theme-option="sumi" title="墨 Sumi（ダーク）">墨</button>
+                <button class="theme-btn" type="button" data-theme-option="ai" title="藍 Ai（ネイビー）">藍</button>
+                <button class="theme-btn" type="button" data-theme-option="washi" title="和紙 Washi（ライト）">紙</button>
+                <button class="theme-btn" type="button" data-theme-option="sakura" title="桜 Sakura（ピンク）">桜</button>
+                <button class="theme-btn" type="button" data-theme-option="matcha" title="抹茶 Matcha（グリーン）">茶</button>
+            </div>
         </div>
     </header>
 
@@ -42,7 +58,7 @@
         <div class="pagination" id="pagination"></div>
     </main>
 
-    <!-- Detail panel (slides in on click) -->
+    <!-- Detail popover (opens on hover, click pins it) -->
     <aside id="detail-panel" class="detail-panel">
         <button id="close-panel" class="close-btn" aria-label="Close">×</button>
         <div class="detail-content">
@@ -75,6 +91,7 @@
                 <h3 class="section-title">Related Kanji</h3>
                 <div class="related-grid" id="related-grid"></div>
             </div>
+            <p class="detail-hint">クリックで固定 · Esc で閉じる</p>
         </div>
     </aside>
 
@@ -125,7 +142,7 @@
         </div>
     </section>
 
-    <script src="js/app.js?v=20260913-4"></script>
+    <script src="js/app.js?v=20261023-1"></script>
     <script src="js/game.js?v=20260910-1"></script>
 </body>
 </html>

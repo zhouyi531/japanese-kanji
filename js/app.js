@@ -17,6 +17,18 @@
     const PAGE_SIZE = 200;  // kanji per page
     const MASTERED_KEY = 'kanji-garden:mastered:v1';
     const mastered = loadMastered();  // per-browser progress, stored locally
+    const THEME_KEY = 'kanji-garden:theme:v1';  // also read by the inline script in index.html
+
+    // Hover popover: open after a short pause, wait longer before switching to another
+    // card (so crossing cards on the way to the popover doesn't flicker), and give the
+    // mouse a grace period to travel from the card into the popover.
+    const HOVER_SHOW_DELAY = 120;
+    const HOVER_SWITCH_DELAY = 220;
+    const HOVER_HIDE_DELAY = 260;
+    const canHover = window.matchMedia('(hover: hover)').matches;
+    let pinned = false;
+    let showTimer = null;
+    let hideTimer = null;
 
     // DOM refs
     const grid = document.getElementById('kanji-grid');
@@ -134,23 +146,15 @@
             if (activeKanji) {
                 if (char === activeKanji) card.classList.add('active');
                 else if (isRelated(activeKanji, char)) card.classList.add('related');
-                else card.classList.add('dimmed');
             }
 
-            // Build tooltip content
-            const onReading = entry.on.slice(0, 2).join(' · ');
-            const kunReading = entry.kun.slice(0, 2).join(' · ');
-            const readingDisplay = [onReading, kunReading].filter(Boolean).join(' / ') || '—';
+            card.innerHTML = `<span class="char">${char}</span>`;
 
-            card.innerHTML = `
-                <span class="char">${char}</span>
-                <div class="tooltip">
-                    <div class="t-reading">${escapeHtml(readingDisplay)}</div>
-                    <div class="t-meaning">${escapeHtml(entry.m)}</div>
-                </div>
-            `;
-
-            card.addEventListener('click', () => activateKanji(char));
+            if (canHover) {
+                card.addEventListener('mouseenter', () => scheduleShow(char, card));
+                card.addEventListener('mouseleave', scheduleHide);
+            }
+            card.addEventListener('click', () => pinKanji(char, card));
             fragment.appendChild(card);
         });
 
@@ -221,41 +225,102 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ===== ACTIVATION (PIN) =====
-    function activateKanji(char) {
+    // ===== HOVER INTENT =====
+    function scheduleShow(char, card) {
+        if (pinned) return;
+        clearTimeout(showTimer);
+        clearTimeout(hideTimer);
+        if (char === activeKanji) return;
+        const delay = activeKanji ? HOVER_SWITCH_DELAY : HOVER_SHOW_DELAY;
+        showTimer = setTimeout(() => activateKanji(char, card), delay);
+    }
+
+    function scheduleHide() {
+        if (pinned) return;
+        clearTimeout(showTimer);
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(deactivateKanji, HOVER_HIDE_DELAY);
+    }
+
+    function cancelHoverTimers() {
+        clearTimeout(showTimer);
+        clearTimeout(hideTimer);
+    }
+
+    // ===== ACTIVATION =====
+    // Click (or tap) keeps the popover open until Esc, × or a click elsewhere.
+    function pinKanji(char, anchor = null) {
+        cancelHoverTimers();
+        pinned = true;
+        if (char === activeKanji && detailPanel.classList.contains('open')) {
+            detailPanel.classList.add('pinned');
+            return;
+        }
+        activateKanji(char, anchor);
+    }
+
+    function activateKanji(char, anchor = null) {
         const entry = kanjiData[char];
         if (!entry) return;
 
         activeKanji = char;
-
-        // Update card states
-        document.querySelectorAll('.kanji-card').forEach(card => {
-            card.classList.remove('active', 'related', 'dimmed');
-            if (card.dataset.char === char) {
-                card.classList.add('active');
-            } else if (isRelated(char, card.dataset.char)) {
-                card.classList.add('related');
-            } else {
-                card.classList.add('dimmed');
-            }
-        });
-
-        // Populate detail panel
+        highlightCards(char);
         populateDetail(char, entry);
 
-        // Open panel
+        const wasOpen = detailPanel.classList.contains('open');
         detailPanel.classList.add('open');
-        overlay.classList.add('visible');
+        detailPanel.classList.toggle('pinned', pinned);
         detailPanel.scrollTop = 0;
+        positionPanel(anchor, wasOpen);
+        if (!canHover) overlay.classList.add('visible');
     }
 
     function deactivateKanji() {
+        cancelHoverTimers();
+        pinned = false;
         activeKanji = null;
-        document.querySelectorAll('.kanji-card').forEach(card => {
-            card.classList.remove('active', 'related', 'dimmed');
-        });
-        detailPanel.classList.remove('open');
+        highlightCards(null);
+        detailPanel.classList.remove('open', 'pinned');
         overlay.classList.remove('visible');
+    }
+
+    function highlightCards(char) {
+        grid.querySelectorAll('.kanji-card').forEach(card => {
+            card.classList.toggle('active', card.dataset.char === char);
+            card.classList.toggle('related', !!char && isRelated(char, card.dataset.char));
+        });
+    }
+
+    // Place the popover beside its card (right side if it fits, else left), clamped to
+    // the viewport. Without an anchor it stays where it was, or centers if newly opened.
+    function positionPanel(anchor, wasOpen) {
+        if (!canHover) return;  // touch layout is a CSS bottom sheet
+        const margin = 12;
+        const gap = 14;
+        const w = detailPanel.offsetWidth;
+        const h = detailPanel.offsetHeight;
+        let left;
+        let top;
+        if (anchor) {
+            // Use the card's settled hover size; its scale transition may still be running.
+            const r = anchor.getBoundingClientRect();
+            const cx = (r.left + r.right) / 2;
+            const half = anchor.offsetWidth * 1.35 / 2;
+            left = cx + half + gap + w <= window.innerWidth - margin
+                ? cx + half + gap
+                : cx - half - gap - w;
+            top = (r.top + r.bottom) / 2 - 80;
+        } else if (wasOpen) {
+            left = parseFloat(detailPanel.style.left) || margin;
+            top = parseFloat(detailPanel.style.top) || margin;
+        } else {
+            left = (window.innerWidth - w) / 2;
+            top = (window.innerHeight - h) / 2;
+        }
+        left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+        top = Math.max(margin, Math.min(top, window.innerHeight - h - margin));
+        detailPanel.style.left = `${left}px`;
+        detailPanel.style.top = `${top}px`;
     }
 
     // ===== DETAIL PANEL =====
@@ -316,17 +381,15 @@
                 // Hover on compound to highlight its kanji in the grid
                 const otherKanji = [...word].filter(c => c !== char && kanjiData[c]);
                 item.addEventListener('mouseenter', () => {
-                    document.querySelectorAll('.kanji-card').forEach(card => {
+                    grid.querySelectorAll('.kanji-card').forEach(card => {
                         if (otherKanji.includes(card.dataset.char)) {
-                            card.classList.add('related');
+                            card.classList.add('compound-hint');
                         }
                     });
                 });
                 item.addEventListener('mouseleave', () => {
-                    document.querySelectorAll('.kanji-card.related').forEach(card => {
-                        if (card.dataset.char !== activeKanji) {
-                            card.classList.remove('related');
-                        }
+                    grid.querySelectorAll('.kanji-card.compound-hint').forEach(card => {
+                        card.classList.remove('compound-hint');
                     });
                 });
 
@@ -342,9 +405,7 @@
             card.className = 'related-card';
             card.textContent = rc;
             card.title = kanjiData[rc]?.m || '';
-            card.addEventListener('click', () => {
-                activateKanji(rc);
-            });
+            card.addEventListener('click', () => pinKanji(rc));
             relatedGrid.appendChild(card);
         });
     }
@@ -423,7 +484,7 @@
 
     // Open the kanji that lists this compound, then point at the compound itself.
     function showCompound(owner, word) {
-        activateKanji(owner);
+        pinKanji(owner);
         const target = [...compoundsList.querySelectorAll('.compound-item')]
             .find(item => item.dataset.word === word);
         if (!target) return;
@@ -482,8 +543,21 @@
         overlay.addEventListener('click', deactivateKanji);
         document.addEventListener('kanji:show-detail', event => {
             const char = event.detail?.char;
-            if (char && kanjiData[char]) activateKanji(char);
+            if (char && kanjiData[char]) pinKanji(char);
         });
+
+        // Moving into the popover keeps it open; leaving it closes it unless pinned.
+        detailPanel.addEventListener('mouseenter', cancelHoverTimers);
+        detailPanel.addEventListener('mouseleave', scheduleHide);
+
+        // A click outside a pinned popover closes it (cards handle their own clicks).
+        document.addEventListener('mousedown', (e) => {
+            if (!activeKanji || detailPanel.contains(e.target)) return;
+            if (e.target.closest('.kanji-card')) return;
+            deactivateKanji();
+        });
+
+        setupThemePicker();
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -513,6 +587,20 @@
                 searchInput.focus();
             }
         });
+    }
+
+    // ===== THEMES =====
+    function setupThemePicker() {
+        const buttons = document.querySelectorAll('#theme-picker .theme-btn');
+        const mark = () => buttons.forEach(btn => btn.setAttribute('aria-pressed',
+            String(btn.dataset.themeOption === document.documentElement.dataset.theme)));
+        buttons.forEach(btn => btn.addEventListener('click', () => {
+            document.documentElement.dataset.theme = btn.dataset.themeOption;
+            try { localStorage.setItem(THEME_KEY, btn.dataset.themeOption); }
+            catch (e) { console.warn('Could not save theme:', e); }
+            mark();
+        }));
+        mark();
     }
 
     // ===== BACKGROUND PARTICLES =====
